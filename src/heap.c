@@ -75,14 +75,27 @@ void heap_free(heap_t* heap, void* address)
 	tlsf_free(heap->tlsf, address);
 }
 
+static void leak_walker(void* ptr, size_t size, int used, void* user) {
+	if (used) {
+		debug_print(k_print_warning, "Memory leak of size %u bytes with callstack:\n", (unsigned int)size);
+		void* stack[10];
+		int traces = debug_backtrace(stack, 10);
+	}
+}
+
 void heap_destroy(heap_t* heap)
 {
+	
+	
+	
 	tlsf_destroy(heap->tlsf);
 
 	arena_t* arena = heap->arena;
 	while (arena)
 	{
 		arena_t* next = arena->next;
+		tlsf_walk_pool(arena->pool, leak_walker, NULL);
+		
 		VirtualFree(arena, 0, MEM_RELEASE);
 		arena = next;
 	}
