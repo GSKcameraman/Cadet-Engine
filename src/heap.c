@@ -75,7 +75,7 @@ void* heap_alloc(heap_t* heap, size_t size, size_t alignment)
 	}
 	
 	int traces = debug_backtrace((void**) address, CALLSTACK_DEPTH);
-	return ((char*)address - sizeof(void*) * CALLSTACK_DEPTH);
+	return ((char*)address + sizeof(void*) * CALLSTACK_DEPTH);
 }
 
 void heap_free(heap_t* heap, void* address)

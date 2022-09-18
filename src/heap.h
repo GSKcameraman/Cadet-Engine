@@ -14,6 +14,7 @@ typedef struct heap_t heap_t;
 heap_t* heap_create(size_t grow_increment);
 
 // Destroy a previously created heap.
+// warns you for all the unfreed memories.
 void heap_destroy(heap_t* heap);
 
 // Allocate memory from a heap.

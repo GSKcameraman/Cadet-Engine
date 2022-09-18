@@ -63,8 +63,12 @@ static void homework1_test()
 {
 	heap_t* heap = heap_create(4096);
 	void* block1 = homework1_allocate_1(heap);
-	/*leaked*/ homework1_allocate_2(heap);
-	/*leaked*/ homework1_allocate_3(heap);
+	/*leaked*/ 
+	void* block2 = homework1_allocate_2(heap);
+	/*leaked*/ 
+	void* block3 =  homework1_allocate_3(heap);
+	/*leaked*/
+	void* block4 = heap_alloc(heap, 11, 8);
 	heap_free(heap, block1);
 	heap_destroy(heap);
 }
