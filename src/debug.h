@@ -27,3 +27,9 @@ void debug_print(uint32_t type, _Printf_format_string_ const char* format, ...);
 // On return, stack contains at most stack_capacity addresses.
 // The number of addresses captured is the return value.
 int debug_backtrace(void** stack, int stack_capacity);
+
+/*
+*the function is used to print out the call stack from the stack.
+*count is the maximum number of address in stack.
+*/
+void callstack_printer(uint32_t type, void* stack[], size_t count);

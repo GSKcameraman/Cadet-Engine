@@ -69,4 +69,27 @@ void debug_print(uint32_t type, _Printf_format_string_ const char* format, ...)
 int debug_backtrace(void** stack, int stack_capacity)
 {
 	return CaptureStackBackTrace(1, stack_capacity, stack, NULL);
+
+}
+
+void callstack_printer(uint32_t type, void* stack[], size_t count) {
+
+	HANDLE process = GetCurrentProcess();
+	SymInitialize(process, NULL, TRUE);
+	char symbol_mem[sizeof(IMAGEHLP_SYMBOL64) + 256];
+	IMAGEHLP_SYMBOL64* symbol = (IMAGEHLP_SYMBOL64*)symbol_mem;
+	symbol->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
+	symbol->MaxNameLength = 255;
+	int i;
+	for (i = 0; i < count; i++) {
+		void* addr = stack[i];
+		if (addr == NULL) {
+			break;
+		}
+		SymGetSymFromAddr(process, (DWORD64)addr, 0, symbol);
+		char* name[256];
+		UnDecorateSymbolName(symbol->Name, (PSTR)name, 256, UNDNAME_COMPLETE);
+		debug_print(k_print_warning, "[%d] %s\n", i, symbol->Name);
+	}
+	SymCleanup(process);
 }
