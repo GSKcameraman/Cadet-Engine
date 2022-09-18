@@ -81,6 +81,10 @@ void callstack_printer(uint32_t type, void* stack[], size_t count) {
 	symbol->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
 	symbol->MaxNameLength = 255;
 	
+	char line_mem[sizeof(IMAGEHLP_LINE64)];
+	IMAGEHLP_LINE* line = (IMAGEHLP_LINE*)line_mem;
+	line->SizeOfStruct = sizeof(IMAGEHLP_LINE);
+
 	int i;
 	for (i = 0; i < count; i++) {
 		void* addr = stack[i];
@@ -90,8 +94,13 @@ void callstack_printer(uint32_t type, void* stack[], size_t count) {
 		SymGetSymFromAddr(process, (DWORD64)addr, 0, symbol);
 		char* name[256];
 		UnDecorateSymbolName(symbol->Name, (PSTR)name, 256, UNDNAME_COMPLETE);
-		debug_print(k_print_warning, "[%d] %s\n", i, symbol->Name);
+		debug_print(type, "[%d] %s ", i, symbol->Name);
 		
+		DWORD displace = 0;
+		SymGetLineFromAddr(process, (DWORD64)addr, &displace, line);
+		char* fileName = strrchr(line->FileName, '\\') + 1;
+		debug_print(type, "at %s:%d\n",fileName, line->LineNumber);
+
 		char buffer[256];
 		sprintf_s(buffer, 256, "%s", symbol->Name);
 		if (!strcmp(buffer,"main")) {
