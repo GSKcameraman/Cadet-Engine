@@ -92,14 +92,15 @@ void callstack_printer(uint32_t type, void* stack[], size_t count) {
 			break;
 		}
 		SymGetSymFromAddr(process, (DWORD64)addr, 0, symbol);
-		char* name[256];
-		UnDecorateSymbolName(symbol->Name, (PSTR)name, 256, UNDNAME_COMPLETE);
-		debug_print(type, "[%d] %s ", i, symbol->Name);
-		
 		DWORD displace = 0;
 		SymGetLineFromAddr(process, (DWORD64)addr, &displace, line);
 		char* fileName = strrchr(line->FileName, '\\') + 1;
-		debug_print(type, "at %s:%d\n",fileName, line->LineNumber);
+		char* name[256];
+		UnDecorateSymbolName(symbol->Name, (PSTR)name, 256, UNDNAME_COMPLETE);
+		debug_print(type, "[%d] %s\t\tat %s:%d\n", i, symbol->Name, fileName, line->LineNumber);
+		
+		
+		
 
 		char buffer[256];
 		sprintf_s(buffer, 256, "%s", symbol->Name);
