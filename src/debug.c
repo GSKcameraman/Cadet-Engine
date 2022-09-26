@@ -97,13 +97,16 @@ void callstack_printer(uint32_t type, void* stack[], size_t count) {
 		char* fileName = strrchr(line->FileName, '\\') + 1;
 		char* name[256];
 		UnDecorateSymbolName(symbol->Name, (PSTR)name, 256, UNDNAME_COMPLETE);
+		char buffer[256];
+		sprintf_s(buffer, 256, "%s", symbol->Name);
+		if (!strcmp(buffer, "invoke_main")) {
+			break;
+		}
 		debug_print(type, "[%d] %s\t\tat %s:%d\n", i, symbol->Name, fileName, line->LineNumber);
 		
 		
 		
 
-		char buffer[256];
-		sprintf_s(buffer, 256, "%s", symbol->Name);
 		if (!strcmp(buffer,"main")) {
 			break;
 		}

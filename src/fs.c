@@ -70,6 +70,7 @@ void fs_destroy(fs_t* fs)
 	queue_push(fs->file_queue, NULL);
 	thread_destroy(fs->file_thread);
 	queue_destroy(fs->file_queue);
+	queue_push(fs->compress_queue, NULL);
 	thread_destroy(fs->compress_thread);
 	queue_destroy(fs->compress_queue); 
 	heap_free(fs->heap, fs);
@@ -289,10 +290,14 @@ static int file_thread_func(void* user)
 
 static void file_compress(fs_work_t* work) {
 	void* buffer_temp = heap_alloc(work->heap, work->size, 8);
-	int compressed_size = LZ4_compress_default(work->buffer, buffer_temp, (int)work->size, (int)work->size);
+	int compressed_size = LZ4_compress_default((char*)work->buffer, (char*)buffer_temp, (int)work->size, (int)work->size);
 	
-	
-	work->buffer = buffer_temp;
+	if (compressed_size != 0) {
+		work->buffer = buffer_temp;
+	}
+	else {
+		heap_free(work->heap, buffer_temp);
+	}
 	//work->size = compressed_size;
 	event_signal(work->com_done);
 }
@@ -300,9 +305,15 @@ static void file_compress(fs_work_t* work) {
 static void file_decompress(fs_work_t* work) {
 	char* buffer_temp = heap_alloc(work->heap, work->null_terminate ? (int)(work->size * 255 + 1) : (int)work->size * 255, 8);
 	int decompress_size = LZ4_decompress_safe(work->buffer, buffer_temp, (int)work->size, (int)work->size * 2);
-	work->size = decompress_size;
-	heap_free(work->heap, work->buffer);
-	work->buffer = buffer_temp;
+	if (decompress_size > 0) {
+		work->size = decompress_size;
+		heap_free(work->heap, work->buffer);
+		work->buffer = buffer_temp;
+
+	}
+	else {
+		heap_free(work->heap, buffer_temp);
+	}
 	event_signal(work->com_done);
 }
 
