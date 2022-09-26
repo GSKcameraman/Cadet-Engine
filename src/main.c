@@ -107,7 +107,7 @@ static void homework2_test()
 	homework2_test_internal(heap, fs, disable_compression);
 
 	// HOMEWORK 2: Set enable_compression to true when implemented!
-	const bool enable_compression = false;
+	const bool enable_compression = true;
 	homework2_test_internal(heap, fs, enable_compression);
 
 	fs_destroy(fs);
