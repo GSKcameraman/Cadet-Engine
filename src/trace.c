@@ -79,7 +79,7 @@ void trace_duration_push(trace_t* trace, const char* name)
 			trace->event_num++;
 			//finished making the trace. write to the buffer.
 			char buffer[512];
-			sprintf_s(buffer, 512, "\n{\"name\": \"%s\",\"ph\" : \"B\",\"pid\" : %" PRIu64 ",\"tid\" : \"%"PRIu64"\",\"ts\" : \" %" PRIu64 "\" }, ", name, current->pid, current->tid, us);
+			sprintf_s(buffer, 512, "\n\t\t{\"name\": \"%s\",\"ph\" : \"B\",\"pid\" : %" PRIu64 ",\"tid\" : \"%"PRIu64"\",\"ts\" : %" PRIu64 " },", name, current->pid, current->tid, us);
 			strcat_s(trace->info, sizeof(trace->info), buffer);
 
 		}
@@ -97,7 +97,7 @@ void trace_duration_pop(trace_t* trace)
 		trace->events = popping->next;
 		trace->event_num--;
 		char buffer[512];
-		sprintf_s(buffer,512, "\n{\"name\": \"%s\",\"ph\" : \"E\",\"pid\" : %" PRIu64 ",\"tid\" : \"%"PRIu64"\",\"ts\" : \" %" PRIu64 "\" }, ", popping->name, popping->pid, popping->tid, us);
+		sprintf_s(buffer,512, "\n\t\t{\"name\": \"%s\",\"ph\" : \"E\",\"pid\" : %" PRIu64 ",\"tid\" : \"%"PRIu64"\",\"ts\" : %" PRIu64 " },", popping->name, popping->pid, popping->tid, us);
 		strcat_s(trace->info, sizeof(trace->info), buffer);
 		heap_free(trace->heap, popping);
 	}
@@ -107,7 +107,7 @@ void trace_capture_start(trace_t* trace, const char* path)
 {
 	trace->started = true;
 	strcpy_s(trace->path, sizeof(trace->path), path);
-	char* write = "{\n\"displayTimeUnit\": \"ns\", \"traceEvents\" : [";
+	char* write = "{\n\t\"displayTimeUnit\": \"ns\", \"traceEvents\" : [";
 	strcpy_s(trace->info, sizeof(trace->info), write);
 }
 
@@ -115,8 +115,8 @@ void trace_capture_stop(trace_t* trace)
 {
 	trace->started = false;
 	//ready the output file
-	trace->info[strlen(trace->info) - 2] = '\0';
-	char* final = "\n] \n}";
+	trace->info[strlen(trace->info) - 1] = '\0';
+	char* final = "\n\t] \n}";
 	strcat_s(trace->info, sizeof(trace->info), final);
 	fs_work_t* writework = fs_write(trace->fs, trace->path, trace->info, strlen(trace->info), false);
 	fs_work_destroy(writework);
