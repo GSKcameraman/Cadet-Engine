@@ -12,6 +12,7 @@
 #include <assert.h>
 #include <stdio.h>
 
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
 static void homework3_test();

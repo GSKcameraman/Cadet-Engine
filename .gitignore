@@ -68,3 +68,6 @@ src/foo.bar
 src/.vs/ga2022/FileContentIndex/99cf9b36-e517-4319-bf27-e8cdaf2145dd.vsidx
 src/.vs/ga2022/FileContentIndex/8888b558-d1ac-4af5-8f42-1694fa2db8a1.vsidx
 src/.vs/ga2022/FileContentIndex/22e851a7-5ef6-471c-9779-15a5cd32e7e6.vsidx
+*.vsidx
+*.bar
+*.bar
