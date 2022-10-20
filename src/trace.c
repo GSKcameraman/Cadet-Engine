@@ -2,7 +2,7 @@
 #include "heap.h"
 #include "fs.h"
 #include "timer.h"
-
+#include "mutex.h"
 
 #include <stddef.h>
 #include <stdbool.h>
@@ -31,6 +31,7 @@ typedef struct trace_t
 	event_t* events;
 	heap_t* heap;
 	fs_t* fs;
+	mutex_t* mutex;
 	char path[1024];
 	char info[5120];
 	bool started;
@@ -45,13 +46,13 @@ trace_t* trace_create(heap_t* heap, int event_capacity)
 	result->event_num = 0;
 	result->heap = heap;
 	result->fs = fs_create(heap, 100);
-	
+	result->mutex = mutex_create();
 	return result;
 }
 
 void trace_destroy(trace_t* trace)
 {
-	//free every event
+	//free every event(if any!)
 	event_t* eventa = trace->events;
 	while (eventa != NULL) {
 		event_t* b = eventa->next;
@@ -59,7 +60,7 @@ void trace_destroy(trace_t* trace)
 		eventa = b;
 	}
 	
-	
+	mutex_destroy(trace->mutex);
 	fs_destroy(trace->fs);
 	heap_free(trace->heap, trace);
 }
@@ -69,6 +70,7 @@ void trace_duration_push(trace_t* trace, const char* name)
 	if (trace->started) {
 		uint64_t tick = timer_get_ticks();
 		uint64_t us = timer_ticks_to_us(tick);
+		mutex_lock(trace->mutex);
 		if (trace->event_num < trace->capacity) {
 			event_t* current = heap_alloc(trace->heap, sizeof(event_t), 8);
 			strcpy_s(current->name, sizeof(current->name), name);
@@ -83,7 +85,7 @@ void trace_duration_push(trace_t* trace, const char* name)
 			strcat_s(trace->info, sizeof(trace->info), buffer);
 
 		}
-
+		mutex_unlock(trace->mutex);
 	}
 }
 
@@ -92,14 +94,18 @@ void trace_duration_pop(trace_t* trace)
 	if (trace->started) {
 		uint64_t tick = timer_get_ticks();
 		uint64_t us = timer_ticks_to_us(tick);
-
+		mutex_lock(trace->mutex);
 		event_t* popping = trace->events;
-		trace->events = popping->next;
-		trace->event_num--;
-		char buffer[512];
-		sprintf_s(buffer,512, "\n\t\t{\"name\": \"%s\",\"ph\" : \"E\",\"pid\" : %" PRIu64 ",\"tid\" : \"%"PRIu64"\",\"ts\" : %" PRIu64 " },", popping->name, popping->pid, popping->tid, us);
-		strcat_s(trace->info, sizeof(trace->info), buffer);
-		heap_free(trace->heap, popping);
+		if (popping != NULL) {
+			trace->events = popping->next;
+			trace->event_num--;
+			char buffer[512];
+			sprintf_s(buffer, 512, "\n\t\t{\"name\": \"%s\",\"ph\" : \"E\",\"pid\" : %" PRIu64 ",\"tid\" : \"%"PRIu64"\",\"ts\" : %" PRIu64 " },", popping->name, popping->pid, popping->tid, us);
+			strcat_s(trace->info, sizeof(trace->info), buffer);
+			heap_free(trace->heap, popping);
+
+		}
+		mutex_unlock(trace->mutex);
 	}
 }
 
