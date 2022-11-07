@@ -72,3 +72,7 @@ src/.vs/ga2022/FileContentIndex/22e851a7-5ef6-471c-9779-15a5cd32e7e6.vsidx
 *.bar
 *.bar
 src/foo.bar
+src/ga2022-crash.dmp
+src/ga2022-crash.dmp
+src/foo.bar
+src/x64/Debug/ga2022.vcxproj.FileListAbsolute.txt
