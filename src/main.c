@@ -3,7 +3,7 @@
 #include "heap.h"
 #include "net.h"
 #include "render.h"
-#include "simple_game.h"
+#include "frogger_game.h"
 #include "timer.h"
 #include "wm.h"
 
@@ -26,18 +26,18 @@ int main(int argc, const char* argv[])
 	}
 	net_t* net = net_create(heap, port);
 
-	simple_game_t* game = simple_game_create(heap, fs, window, render);
+	frogger_game_t* game = frogger_game_create(heap, fs, window, render);
 
 	while (!wm_pump(window))
 	{
 		net_update(net);
-		simple_game_update(game);
+		frogger_game_update(game);
 	}
 
 	/* XXX: Shutdown render before the game. Render uses game resources. */
 	render_destroy(render);
 
-	simple_game_destroy(game);
+	frogger_game_destroy(game);
 
 	net_destroy(net);
 	wm_destroy(window);
