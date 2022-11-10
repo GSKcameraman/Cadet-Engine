@@ -116,8 +116,8 @@ frogger_game_t* frogger_game_create(heap_t* heap, fs_t* fs, wm_window_t* window,
 	game->player_type = ecs_register_component_type(game->ecs, "player", sizeof(player_component_t), _Alignof(player_component_t));
 	game->name_type = ecs_register_component_type(game->ecs, "name", sizeof(name_component_t), _Alignof(name_component_t));
 	game->speed_type = ecs_register_component_type(game->ecs, "speed", sizeof(speed_component_t), _Alignof(speed_component_t));
-	game->refresh_type = ecs_register_component_type(game->ecs, "name", sizeof(refresh_component_t), _Alignof(refresh_component_t));
-	game->row_type = ecs_register_component_type(game->ecs, "name", sizeof(row_component_t), _Alignof(row_component_t));
+	game->refresh_type = ecs_register_component_type(game->ecs, "refresh", sizeof(refresh_component_t), _Alignof(refresh_component_t));
+	game->row_type = ecs_register_component_type(game->ecs, "row", sizeof(row_component_t), _Alignof(row_component_t));
 
 
 	load_resources(game);
