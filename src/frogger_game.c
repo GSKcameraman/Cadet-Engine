@@ -6,6 +6,7 @@
 #include "timer_object.h"
 #include "transform.h"
 #include "wm.h"
+#include "debug.h"
 
 #define _USE_MATH_DEFINES
 #include <math.h>
@@ -46,6 +47,10 @@ typedef struct refresh_component_t {
 	float rate;
 }refresh_component_t;
 
+typedef struct row_component_t {
+	int row;
+}row_component_t;
+
 typedef struct frogger_game_t
 {
 	heap_t* heap;
@@ -63,6 +68,7 @@ typedef struct frogger_game_t
 	int name_type;
 	int speed_type;
 	int refresh_type;
+	int row_type;
 	ecs_entity_ref_t player_ent;
 	ecs_entity_ref_t camera_ent;
 
@@ -75,17 +81,23 @@ typedef struct frogger_game_t
 } frogger_game_t;
 
 
-float elapsedTime = 0.0f;
+float elapsedTime = 1.0f;
 float right = 80.0f / 4.0f;
 float top = 45.0f / 4.0f;
 static void load_resources(frogger_game_t* game);
 static void unload_resources(frogger_game_t* game);
 static void spawn_player(frogger_game_t* game, int index);
-static void spawn_enemy(frogger_game_t* game, int index, int row);
+static void spawn_enemy(frogger_game_t* game, int index, int row, int order);
 static void spawn_camera(frogger_game_t* game);
 static void update_players(frogger_game_t* game);
-static void transform_enemies(transform_component_t* transform_comp, player_component_t* player_comp,float speed,float dt);
+static void transform_player(transform_component_t* transform_comp, player_component_t* player_comp, float speed, uint32_t key_mask);
+static void transform_enemies(transform_component_t* transform_comp, int row,float speed,float dt);
 static void draw_models(frogger_game_t* game);
+static void collision_detecter(transform_component_t* player_transform, transform_component_t* transform_comp);
+static void respawn_player(transform_component_t* player_transform);
+
+
+
 
 frogger_game_t* frogger_game_create(heap_t* heap, fs_t* fs, wm_window_t* window, render_t* render)
 {
@@ -105,13 +117,24 @@ frogger_game_t* frogger_game_create(heap_t* heap, fs_t* fs, wm_window_t* window,
 	game->name_type = ecs_register_component_type(game->ecs, "name", sizeof(name_component_t), _Alignof(name_component_t));
 	game->speed_type = ecs_register_component_type(game->ecs, "speed", sizeof(speed_component_t), _Alignof(speed_component_t));
 	game->refresh_type = ecs_register_component_type(game->ecs, "name", sizeof(refresh_component_t), _Alignof(refresh_component_t));
+	game->row_type = ecs_register_component_type(game->ecs, "name", sizeof(row_component_t), _Alignof(row_component_t));
+
 
 	load_resources(game);
 	spawn_player(game, 0);
-	spawn_enemy(game, 1, 1);
-	spawn_enemy(game, 2, 2);
-	spawn_enemy(game, 3, 3);
-	spawn_enemy(game, 4, 4);
+	spawn_enemy(game, 1, 1, 0);
+	spawn_enemy(game, 2, 2, 1);
+	spawn_enemy(game, 3, 3, 2);
+	spawn_enemy(game, 4, 4, 3);
+	spawn_enemy(game, 5, 5, 1);
+	spawn_enemy(game, 6, 6, 0);
+	spawn_enemy(game, 7, 7, 0);
+	spawn_enemy(game, 8, 8, 0);
+	spawn_enemy(game, 9, 9, 0);
+	spawn_enemy(game, 11, 1, 2);
+	spawn_enemy(game, 12, 1, 5);
+	spawn_enemy(game, 13, 2, -4);
+	spawn_enemy(game, 14, 2, 4);
 	spawn_camera(game);
 
 	return game;
@@ -236,7 +259,7 @@ static void spawn_player(frogger_game_t* game, int index)
 	transform_component_t* transform_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->transform_type, true);
 	transform_identity(&transform_comp->transform);
 	transform_comp->transform.translation.z = top - 1.0f;
-	transform_comp->transform.translation.y = (float)index * 2.5f;
+	
 
 	name_component_t* name_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->name_type, true);
 	strcpy_s(name_comp->name, sizeof(name_comp->name), "player");
@@ -253,9 +276,10 @@ static void spawn_player(frogger_game_t* game, int index)
 
 	refresh_component_t* refresh_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->refresh_type, true);
 	refresh_comp->rate = 0.25f;
+
 }
 
-static void spawn_enemy(frogger_game_t* game, int index, int row) {
+static void spawn_enemy(frogger_game_t* game, int index, int row, int order) {
 	uint64_t k_player_ent_mask =
 		(1ULL << game->transform_type) |
 		(1ULL << game->model_type) |
@@ -266,7 +290,7 @@ static void spawn_enemy(frogger_game_t* game, int index, int row) {
 	transform_component_t* transform_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->transform_type, true);
 	transform_identity(&transform_comp->transform);
 	transform_comp->transform.translation.z = top - 1.0f - 2.0f * row;
-	transform_comp->transform.translation.y = (float)index * 2.5f;
+	transform_comp->transform.translation.y = order * 2.0f;
 
 	name_component_t* name_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->name_type, true);
 	strcpy_s(name_comp->name, sizeof(name_comp->name), "enemy");
@@ -278,8 +302,17 @@ static void spawn_enemy(frogger_game_t* game, int index, int row) {
 	model_comp->mesh_info = &game->rect_mesh;
 	model_comp->shader_info = &game->cube_shader;
 
+	refresh_component_t* refresh_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->refresh_type, true);
+	refresh_comp->rate = 0.25f;
+
+
 	speed_component_t* speed_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->speed_type, true);
-	speed_comp->speed = 5.0f;
+	speed_comp->speed = 3.0f;
+
+	row_component_t* row_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->row_type, true);
+	row_comp->row = row;
+
+
 }
 
 
@@ -308,14 +341,18 @@ static void update_players(frogger_game_t* game)
 
 	elapsedTime += dt;
 
-	uint32_t key_mask = wm_get_key_mask(game->window);
+	
 
 	uint64_t k_query_mask = (1ULL << game->transform_type) | (1ULL << game->player_type);
+
+	transform_component_t* player_transform = NULL;
 
 	for (ecs_query_t query = ecs_query_create(game->ecs, k_query_mask);
 		ecs_query_is_valid(game->ecs, &query);
 		ecs_query_next(game->ecs, &query))
 	{
+
+
 		transform_component_t* transform_comp = ecs_query_get_component(game->ecs, &query, game->transform_type);
 		player_component_t* player_comp = ecs_query_get_component(game->ecs, &query, game->player_type);
 		name_component_t* name_comp = ecs_query_get_component(game->ecs, &query, game->name_type);
@@ -323,45 +360,72 @@ static void update_players(frogger_game_t* game)
 
 		if (strcmp(name_comp->name, "player") == 0) {
 			refresh_component_t* refresh_comp = ecs_query_get_component(game->ecs, &query, game->refresh_type);
-			
+			player_transform = transform_comp;
 			if (elapsedTime >= refresh_comp->rate) {
-				elapsedTime = 0;
+				
 				float speed = speed_comp->speed;
-				transform_t move;
-				transform_identity(&move);
-				if (key_mask & k_key_up)
-				{
-					move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_up(), -speed));
-				}
-				if (key_mask & k_key_down)
-				{
-					move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_up(), speed));
-				}
-				if (key_mask & k_key_left)
-				{
-					move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_right(), -speed));
-				}
-				if (key_mask & k_key_right)
-				{
-					move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_right(), speed));
-				}
-				transform_multiply(&transform_comp->transform, &move);
+				uint32_t key_mask = wm_get_key_mask(game->window);
+				transform_player(transform_comp, player_comp, speed, key_mask);
+
 
 			}
 		}
 		else {
-			transform_enemies(transform_comp, player_comp, speed_comp->speed,dt);
+			row_component_t* row_comp = ecs_query_get_component(game->ecs, &query, game->row_type);
+			int row = row_comp->row;
+			transform_enemies(transform_comp, row, speed_comp->speed,dt);
+			collision_detecter(player_transform, transform_comp);
 		}
 	
 	}
 }
 
-static void transform_enemies(transform_component_t* transform_comp, player_component_t* player_comp,float speed, float dt) {
+static void transform_player(transform_component_t* transform_comp, player_component_t* player_comp, float speed, uint32_t key_mask) {
+	transform_t move;
+	transform_identity(&move);
+	
+	if (key_mask & k_key_up)
+	{
+		move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_up(), -speed));
+		elapsedTime = 0;
+	}
+	if (key_mask & k_key_down)
+	{
+		move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_up(), speed));
+		elapsedTime = 0;
+	}
+	if (key_mask & k_key_left)
+	{
+		move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_right(), -speed));
+		elapsedTime = 0;
+	}
+	if (key_mask & k_key_right)
+	{
+		move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_right(), speed));
+		elapsedTime = 0;
+	}
+	transform_multiply(&transform_comp->transform, &move);
+	if (transform_comp->transform.translation.y > right) {
+		transform_comp->transform.translation.y = -right;
+	}
+	if (transform_comp->transform.translation.y < -right) {
+		transform_comp->transform.translation.y = right;
+	}
+	if (transform_comp->transform.translation.z > top) {
+		debug_print(k_print_info, "Reached other side of the road!\n");
+		respawn_player(transform_comp);
+	}
+	if (transform_comp->transform.translation.z < -top) {
+		transform_comp->transform.translation.z = top - 1.0f;
+	}
+}
+
+static void transform_enemies(transform_component_t* transform_comp, int row, float speed, float dt) {
 	
 	
 	transform_t move;
 	transform_identity(&move);
-	if (player_comp->index % 2 == 0) {
+	if (row % 2 == 0) {
 		move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_right(), dt*speed));
 	}
 	else {
@@ -375,6 +439,20 @@ static void transform_enemies(transform_component_t* transform_comp, player_comp
 		transform_comp->transform.translation.y = right;
 	}
 
+}
+
+static void collision_detecter(transform_component_t* player_transform, transform_component_t* transform_comp) {
+	if (player_transform->transform.translation.z == transform_comp->transform.translation.z && 
+		fabsf(player_transform->transform.translation.y - transform_comp->transform.translation.y) < 0.75f) {
+		debug_print(k_print_info, "Collision!\n");
+		respawn_player(player_transform);
+	}
+}
+
+static void respawn_player(transform_component_t* player_transform) {
+	transform_identity(&(player_transform->transform));
+	player_transform->transform.translation.z = top - 1.0f;
+	
 }
 
 static void draw_models(frogger_game_t* game)
