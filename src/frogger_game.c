@@ -77,6 +77,7 @@ typedef struct frogger_game_t
 	gpu_shader_info_t cube_shader;
 	gpu_shader_info_t rect_shader;
 	fs_work_t* vertex_shader_work;
+	fs_work_t* fragment_shader_traffic_work;
 	fs_work_t* fragment_shader_work;
 } frogger_game_t;
 
@@ -160,13 +161,24 @@ void frogger_game_update(frogger_game_t* game)
 static void load_resources(frogger_game_t* game)
 {
 	game->vertex_shader_work = fs_read(game->fs, "shaders/triangle.vert.spv", game->heap, false, false);
+
 	game->fragment_shader_work = fs_read(game->fs, "shaders/triangle.frag.spv", game->heap, false, false);
+	game->fragment_shader_traffic_work = fs_read(game->fs, "shaders/traffic.frag.spv", game->heap, false, false);
 	game->cube_shader = (gpu_shader_info_t)
 	{
 		.vertex_shader_data = fs_work_get_buffer(game->vertex_shader_work),
 		.vertex_shader_size = fs_work_get_size(game->vertex_shader_work),
 		.fragment_shader_data = fs_work_get_buffer(game->fragment_shader_work),
 		.fragment_shader_size = fs_work_get_size(game->fragment_shader_work),
+		.uniform_buffer_count = 1,
+	};
+
+	game->rect_shader = (gpu_shader_info_t)
+	{
+		.vertex_shader_data = fs_work_get_buffer(game->vertex_shader_work),
+		.vertex_shader_size = fs_work_get_size(game->vertex_shader_work),
+		.fragment_shader_data = fs_work_get_buffer(game->fragment_shader_traffic_work),
+		.fragment_shader_size = fs_work_get_size(game->fragment_shader_traffic_work),
 		.uniform_buffer_count = 1,
 	};
 
@@ -245,6 +257,7 @@ static void unload_resources(frogger_game_t* game)
 {
 	fs_work_destroy(game->fragment_shader_work);
 	fs_work_destroy(game->vertex_shader_work);
+	fs_work_destroy(game->fragment_shader_traffic_work);
 }
 
 static void spawn_player(frogger_game_t* game, int index)
@@ -300,7 +313,7 @@ static void spawn_enemy(frogger_game_t* game, int index, int row, int order) {
 
 	model_component_t* model_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->model_type, true);
 	model_comp->mesh_info = &game->rect_mesh;
-	model_comp->shader_info = &game->cube_shader;
+	model_comp->shader_info = &game->rect_shader;
 
 	refresh_component_t* refresh_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->refresh_type, true);
 	refresh_comp->rate = 0.25f;
@@ -412,11 +425,12 @@ static void transform_player(transform_component_t* transform_comp, player_compo
 		transform_comp->transform.translation.y = right;
 	}
 	if (transform_comp->transform.translation.z > top) {
-		debug_print(k_print_info, "Reached other side of the road!\n");
+		debug_print(k_print_info, "Reached bottom of the road!\n");
 		respawn_player(transform_comp);
 	}
 	if (transform_comp->transform.translation.z < -top) {
-		transform_comp->transform.translation.z = top - 1.0f;
+		debug_print(k_print_info, "Reached other side of the road!\n");
+		respawn_player(transform_comp);
 	}
 }
 
@@ -432,18 +446,18 @@ static void transform_enemies(transform_component_t* transform_comp, int row, fl
 		move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_right(), -dt*speed));
 	}
 	transform_multiply(&transform_comp->transform, &move);
-	if (transform_comp->transform.translation.y > right) {
-		transform_comp->transform.translation.y = -right;
+	if (transform_comp->transform.translation.y > right + 1.0f) {
+		transform_comp->transform.translation.y = -right - 1.0f;
 	}
-	if (transform_comp->transform.translation.y < -right) {
-		transform_comp->transform.translation.y = right;
+	if (transform_comp->transform.translation.y < -right - 1.0f) {
+		transform_comp->transform.translation.y = right + 1.0f;
 	}
 
 }
 
 static void collision_detecter(transform_component_t* player_transform, transform_component_t* transform_comp) {
 	if (player_transform->transform.translation.z == transform_comp->transform.translation.z && 
-		fabsf(player_transform->transform.translation.y - transform_comp->transform.translation.y) < 0.75f) {
+		fabsf(player_transform->transform.translation.y - transform_comp->transform.translation.y) < 1.2f) {
 		debug_print(k_print_info, "Collision!\n");
 		respawn_player(player_transform);
 	}
