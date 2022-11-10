@@ -38,6 +38,14 @@ typedef struct name_component_t
 	char name[32];
 } name_component_t;
 
+typedef struct speed_component_t {
+	float speed;
+}speed_component_t;
+
+typedef struct refresh_component_t {
+	float rate;
+}refresh_component_t;
+
 typedef struct frogger_game_t
 {
 	heap_t* heap;
@@ -53,22 +61,30 @@ typedef struct frogger_game_t
 	int model_type;
 	int player_type;
 	int name_type;
+	int speed_type;
+	int refresh_type;
 	ecs_entity_ref_t player_ent;
 	ecs_entity_ref_t camera_ent;
 
 	gpu_mesh_info_t cube_mesh;
+	gpu_mesh_info_t rect_mesh;
 	gpu_shader_info_t cube_shader;
+	gpu_shader_info_t rect_shader;
 	fs_work_t* vertex_shader_work;
 	fs_work_t* fragment_shader_work;
 } frogger_game_t;
 
+
+float elapsedTime = 0.0f;
+float right = 80.0f / 4.0f;
+float top = 45.0f / 4.0f;
 static void load_resources(frogger_game_t* game);
 static void unload_resources(frogger_game_t* game);
 static void spawn_player(frogger_game_t* game, int index);
-static void spawn_enemy(frogger_game_t* game, int index);
+static void spawn_enemy(frogger_game_t* game, int index, int row);
 static void spawn_camera(frogger_game_t* game);
 static void update_players(frogger_game_t* game);
-static void transform_enemies(transform_component_t* transform_comp, player_component_t* player_comp,float dt);
+static void transform_enemies(transform_component_t* transform_comp, player_component_t* player_comp,float speed,float dt);
 static void draw_models(frogger_game_t* game);
 
 frogger_game_t* frogger_game_create(heap_t* heap, fs_t* fs, wm_window_t* window, render_t* render)
@@ -87,11 +103,15 @@ frogger_game_t* frogger_game_create(heap_t* heap, fs_t* fs, wm_window_t* window,
 	game->model_type = ecs_register_component_type(game->ecs, "model", sizeof(model_component_t), _Alignof(model_component_t));
 	game->player_type = ecs_register_component_type(game->ecs, "player", sizeof(player_component_t), _Alignof(player_component_t));
 	game->name_type = ecs_register_component_type(game->ecs, "name", sizeof(name_component_t), _Alignof(name_component_t));
+	game->speed_type = ecs_register_component_type(game->ecs, "speed", sizeof(speed_component_t), _Alignof(speed_component_t));
+	game->refresh_type = ecs_register_component_type(game->ecs, "name", sizeof(refresh_component_t), _Alignof(refresh_component_t));
 
 	load_resources(game);
 	spawn_player(game, 0);
-	spawn_enemy(game, 1);
-	spawn_enemy(game, 2);
+	spawn_enemy(game, 1, 1);
+	spawn_enemy(game, 2, 2);
+	spawn_enemy(game, 3, 3);
+	spawn_enemy(game, 4, 4);
 	spawn_camera(game);
 
 	return game;
@@ -138,7 +158,33 @@ static void load_resources(frogger_game_t* game)
 		{  0.5f,  0.5f, -0.5f }, { 0.5f, 0.5f,  0.5f },
 		{ -0.5f,  0.5f, -0.5f }, { 0.0f, 0.0f,  0.0f },
 	};
+	static vec3f_t rect_verts[] =
+	{
+		{ -0.5f, -1.0f,  0.5f }, { 0.0f, 1.0f,  0.5f },
+		{  0.5f, -1.0f,  0.5f }, { 0.5f, 0.0f,  0.5f },
+		{  0.5f,  1.0f,  0.5f }, { 0.5f, 1.0f,  0.0f },
+		{ -0.5f,  1.0f,  0.5f }, { 0.5f, 0.0f,  0.0f },
+		{ -0.5f, -1.0f, -0.5f }, { 0.0f, 1.0f,  0.0f },
+		{  0.5f, -1.0f, -0.5f }, { 0.0f, 0.0f,  0.5f },
+		{  0.5f,  1.0f, -0.5f }, { 0.5f, 1.0f,  0.5f },
+		{ -0.5f,  1.0f, -0.5f }, { 0.0f, 0.0f,  0.0f },
+	};
 	static uint16_t cube_indices[] =
+	{
+		0, 1, 2,
+		2, 3, 0,
+		1, 5, 6,
+		6, 2, 1,
+		7, 6, 5,
+		5, 4, 7,
+		4, 0, 3,
+		3, 7, 4,
+		4, 5, 1,
+		1, 0, 4,
+		3, 2, 6,
+		6, 7, 3
+	};
+	static uint16_t rect_indices[] =
 	{
 		0, 1, 2,
 		2, 3, 0,
@@ -161,6 +207,15 @@ static void load_resources(frogger_game_t* game)
 		.index_data = cube_indices,
 		.index_data_size = sizeof(cube_indices),
 	};
+	game->rect_mesh = (gpu_mesh_info_t)
+	{
+		.layout = k_gpu_mesh_layout_tri_p444_c444_i2,
+		.vertex_data = rect_verts,
+		.vertex_data_size = sizeof(rect_verts),
+		.index_data = rect_indices,
+		.index_data_size = sizeof(rect_indices),
+
+	};
 }
 
 static void unload_resources(frogger_game_t* game)
@@ -180,6 +235,7 @@ static void spawn_player(frogger_game_t* game, int index)
 
 	transform_component_t* transform_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->transform_type, true);
 	transform_identity(&transform_comp->transform);
+	transform_comp->transform.translation.z = top - 1.0f;
 	transform_comp->transform.translation.y = (float)index * 2.5f;
 
 	name_component_t* name_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->name_type, true);
@@ -191,9 +247,15 @@ static void spawn_player(frogger_game_t* game, int index)
 	model_component_t* model_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->model_type, true);
 	model_comp->mesh_info = &game->cube_mesh;
 	model_comp->shader_info = &game->cube_shader;
+
+	speed_component_t* speed_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->speed_type, true);
+	speed_comp->speed = 1.0f;
+
+	refresh_component_t* refresh_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->refresh_type, true);
+	refresh_comp->rate = 0.25f;
 }
 
-static void spawn_enemy(frogger_game_t* game, int index) {
+static void spawn_enemy(frogger_game_t* game, int index, int row) {
 	uint64_t k_player_ent_mask =
 		(1ULL << game->transform_type) |
 		(1ULL << game->model_type) |
@@ -203,6 +265,7 @@ static void spawn_enemy(frogger_game_t* game, int index) {
 
 	transform_component_t* transform_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->transform_type, true);
 	transform_identity(&transform_comp->transform);
+	transform_comp->transform.translation.z = top - 1.0f - 2.0f * row;
 	transform_comp->transform.translation.y = (float)index * 2.5f;
 
 	name_component_t* name_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->name_type, true);
@@ -212,9 +275,11 @@ static void spawn_enemy(frogger_game_t* game, int index) {
 	player_comp->index = index;
 
 	model_component_t* model_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->model_type, true);
-	model_comp->mesh_info = &game->cube_mesh;
+	model_comp->mesh_info = &game->rect_mesh;
 	model_comp->shader_info = &game->cube_shader;
 
+	speed_component_t* speed_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->speed_type, true);
+	speed_comp->speed = 5.0f;
 }
 
 
@@ -229,8 +294,8 @@ static void spawn_camera(frogger_game_t* game)
 	strcpy_s(name_comp->name, sizeof(name_comp->name), "camera");
 
 	camera_component_t* camera_comp = ecs_entity_get_component(game->ecs, game->camera_ent, game->camera_type, true);
-	mat4f_make_perspective(&camera_comp->projection, (float)M_PI / 2.0f, 16.0f / 9.0f, 0.1f, 100.0f);
-
+	//mat4f_make_perspective(&camera_comp->projection, (float)M_PI / 2.0f, 16.0f / 9.0f, 0.1f, 100.0f);
+	mat4f_make_perspective_orthographic(&camera_comp->projection, right, - right, top,- top, 0.1f, 100.0f);
 	vec3f_t eye_pos = vec3f_scale(vec3f_forward(), -5.0f);
 	vec3f_t forward = vec3f_forward();
 	vec3f_t up = vec3f_up();
@@ -240,6 +305,8 @@ static void spawn_camera(frogger_game_t* game)
 static void update_players(frogger_game_t* game)
 {
 	float dt = (float)timer_object_get_delta_ms(game->timer) * 0.001f;
+
+	elapsedTime += dt;
 
 	uint32_t key_mask = wm_get_key_mask(game->window);
 
@@ -252,51 +319,62 @@ static void update_players(frogger_game_t* game)
 		transform_component_t* transform_comp = ecs_query_get_component(game->ecs, &query, game->transform_type);
 		player_component_t* player_comp = ecs_query_get_component(game->ecs, &query, game->player_type);
 		name_component_t* name_comp = ecs_query_get_component(game->ecs, &query, game->name_type);
+		speed_component_t* speed_comp = ecs_query_get_component(game->ecs, &query, game->speed_type);
 
-
-		if (player_comp->index && transform_comp->transform.translation.z > 1.0f)
-		{
-			ecs_entity_remove(game->ecs, ecs_query_get_entity(game->ecs, &query), false);
-		}
 		if (strcmp(name_comp->name, "player") == 0) {
-			transform_t move;
-			transform_identity(&move);
-			if (key_mask & k_key_up)
-			{
-				move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_up(), -dt));
+			refresh_component_t* refresh_comp = ecs_query_get_component(game->ecs, &query, game->refresh_type);
+			
+			if (elapsedTime >= refresh_comp->rate) {
+				elapsedTime = 0;
+				float speed = speed_comp->speed;
+				transform_t move;
+				transform_identity(&move);
+				if (key_mask & k_key_up)
+				{
+					move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_up(), -speed));
+				}
+				if (key_mask & k_key_down)
+				{
+					move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_up(), speed));
+				}
+				if (key_mask & k_key_left)
+				{
+					move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_right(), -speed));
+				}
+				if (key_mask & k_key_right)
+				{
+					move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_right(), speed));
+				}
+				transform_multiply(&transform_comp->transform, &move);
+
 			}
-			if (key_mask & k_key_down)
-			{
-				move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_up(), dt));
-			}
-			if (key_mask & k_key_left)
-			{
-				move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_right(), -dt));
-			}
-			if (key_mask & k_key_right)
-			{
-				move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_right(), dt));
-			}
-			transform_multiply(&transform_comp->transform, &move);
 		}
 		else {
-			transform_enemies(transform_comp, player_comp, dt);
+			transform_enemies(transform_comp, player_comp, speed_comp->speed,dt);
 		}
 	
 	}
 }
 
-static void transform_enemies(transform_component_t* transform_comp, player_component_t* player_comp, float dt) {
+static void transform_enemies(transform_component_t* transform_comp, player_component_t* player_comp,float speed, float dt) {
+	
 	
 	transform_t move;
 	transform_identity(&move);
 	if (player_comp->index % 2 == 0) {
-		move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_right(), dt));
+		move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_right(), dt*speed));
 	}
 	else {
-		move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_right(), -dt));
+		move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_right(), -dt*speed));
 	}
 	transform_multiply(&transform_comp->transform, &move);
+	if (transform_comp->transform.translation.y > right) {
+		transform_comp->transform.translation.y = -right;
+	}
+	if (transform_comp->transform.translation.y < -right) {
+		transform_comp->transform.translation.y = right;
+	}
+
 }
 
 static void draw_models(frogger_game_t* game)

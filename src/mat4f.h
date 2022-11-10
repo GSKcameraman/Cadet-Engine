@@ -54,5 +54,8 @@ bool mat4f_invert(mat4f_t* m);
 // Given a field of view angle in radians, width/height aspect ratio, and depth near+far distances, compute a perspective projection matrix.
 void mat4f_make_perspective(mat4f_t* m, float angle, float aspect, float z_near, float z_far);
 
+//makes an orthographic matrix, requires right, left, top, bottom, near, far.
+void mat4f_make_perspective_orthographic(mat4f_t* m, float right, float left, float top, float bottom, float near, float far);
+
 // Creates a view matrix given an eye location, facing direction, and up vector.
 void mat4f_make_lookat(mat4f_t* m, const vec3f_t* eye, const vec3f_t* dir, const vec3f_t* up);
