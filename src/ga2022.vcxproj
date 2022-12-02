@@ -23,7 +23,7 @@
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{d38baa38-c94d-4328-b058-f5ad4b298122}</ProjectGuid>
     <RootNamespace>ga2022</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -42,7 +42,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
@@ -121,8 +121,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;Dbghelp.lib;winmm.lib;bcrypt.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>vulkan</AdditionalLibraryDirectories>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;Dbghelp.lib;winmm.lib;bcrypt.lib;vulkan-1.lib;soloud_static_x64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>vulkan;SoLoud</AdditionalLibraryDirectories>
     </Link>
     <CustomBuildStep>
       <Command>
@@ -152,6 +152,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="atomic.c" />
+    <ClCompile Include="Audio.c" />
+    <ClCompile Include="c_test.c" />
     <ClCompile Include="debug.c" />
     <ClCompile Include="ecs.c" />
     <ClCompile Include="event.c" />
@@ -181,6 +183,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="atomic.h" />
+    <ClInclude Include="Audio.h" />
+    <ClInclude Include="c_test.h" />
     <ClInclude Include="debug.h" />
     <ClInclude Include="ecs.h" />
     <ClInclude Include="event.h" />
@@ -198,6 +202,41 @@
     <ClInclude Include="render.h" />
     <ClInclude Include="semaphore.h" />
     <ClInclude Include="simple_game.h" />
+    <ClInclude Include="SoLoud\soloud.h" />
+    <ClInclude Include="SoLoud\soloud_audiosource.h" />
+    <ClInclude Include="SoLoud\soloud_bassboostfilter.h" />
+    <ClInclude Include="SoLoud\soloud_biquadresonantfilter.h" />
+    <ClInclude Include="SoLoud\soloud_bus.h" />
+    <ClInclude Include="SoLoud\soloud_c.h" />
+    <ClInclude Include="SoLoud\soloud_dcremovalfilter.h" />
+    <ClInclude Include="SoLoud\soloud_echofilter.h" />
+    <ClInclude Include="SoLoud\soloud_error.h" />
+    <ClInclude Include="SoLoud\soloud_fader.h" />
+    <ClInclude Include="SoLoud\soloud_fft.h" />
+    <ClInclude Include="SoLoud\soloud_fftfilter.h" />
+    <ClInclude Include="SoLoud\soloud_file.h" />
+    <ClInclude Include="SoLoud\soloud_file_hack_off.h" />
+    <ClInclude Include="SoLoud\soloud_file_hack_on.h" />
+    <ClInclude Include="SoLoud\soloud_filter.h" />
+    <ClInclude Include="SoLoud\soloud_flangerfilter.h" />
+    <ClInclude Include="SoLoud\soloud_freeverbfilter.h" />
+    <ClInclude Include="SoLoud\soloud_internal.h" />
+    <ClInclude Include="SoLoud\soloud_lofifilter.h" />
+    <ClInclude Include="SoLoud\soloud_misc.h" />
+    <ClInclude Include="SoLoud\soloud_monotone.h" />
+    <ClInclude Include="SoLoud\soloud_noise.h" />
+    <ClInclude Include="SoLoud\soloud_openmpt.h" />
+    <ClInclude Include="SoLoud\soloud_queue.h" />
+    <ClInclude Include="SoLoud\soloud_robotizefilter.h" />
+    <ClInclude Include="SoLoud\soloud_sfxr.h" />
+    <ClInclude Include="SoLoud\soloud_speech.h" />
+    <ClInclude Include="SoLoud\soloud_tedsid.h" />
+    <ClInclude Include="SoLoud\soloud_thread.h" />
+    <ClInclude Include="SoLoud\soloud_vic.h" />
+    <ClInclude Include="SoLoud\soloud_vizsn.h" />
+    <ClInclude Include="SoLoud\soloud_wav.h" />
+    <ClInclude Include="SoLoud\soloud_waveshaperfilter.h" />
+    <ClInclude Include="SoLoud\soloud_wavstream.h" />
     <ClInclude Include="thread.h" />
     <ClInclude Include="timeofday.h" />
     <ClInclude Include="timer.h" />
@@ -240,6 +279,14 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\triangle.frag" />
+    <None Include="SoLoud\soloud_static_x64_d.idb" />
+    <None Include="SoLoud\soloud_static_x64_d.pdb" />
+    <None Include="SoLoud\soloud_x64.dll" />
+    <None Include="SoLoud\soloud_x64.exp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Library Include="SoLoud\soloud_static_x64.lib" />
+    <Library Include="SoLoud\soloud_x64.lib" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
