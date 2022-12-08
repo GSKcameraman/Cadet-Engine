@@ -7,13 +7,8 @@
 #include "transform.h"
 #include "wm.h"
 #include "debug.h"
+#include "Audio.h"
 
-
-/*
-#include "soloud20200207/include/soloud_c.h"
-#include "soloud20200207/include/soloud_wav.h"
-
-*/
 
 
 #define _USE_MATH_DEFINES
@@ -59,6 +54,15 @@ typedef struct row_component_t {
 	int row;
 }row_component_t;
 
+typedef struct audio_source_component_t {
+	audio_source_t* source;
+}audio_source_component_t;
+
+typedef struct audio_listener_component_t {
+	audio_listener_t* listener;
+}audio_listener_component_t;
+
+
 typedef struct frogger_game_t
 {
 	heap_t* heap;
@@ -67,6 +71,9 @@ typedef struct frogger_game_t
 	render_t* render;
 
 	timer_object_t* timer;
+
+	audio_system_t* audio_system;
+	speech_t* speech;
 
 	ecs_t* ecs;
 	int transform_type;
@@ -77,6 +84,9 @@ typedef struct frogger_game_t
 	int speed_type;
 	int refresh_type;
 	int row_type;
+	int audio_source_type;
+	int audio_listener_type;
+	
 	ecs_entity_ref_t player_ent;
 	ecs_entity_ref_t camera_ent;
 
@@ -87,6 +97,8 @@ typedef struct frogger_game_t
 	fs_work_t* vertex_shader_work;
 	fs_work_t* fragment_shader_traffic_work;
 	fs_work_t* fragment_shader_work;
+
+	
 } frogger_game_t;
 
 
@@ -99,10 +111,10 @@ static void spawn_player(frogger_game_t* game, int index);
 static void spawn_enemy(frogger_game_t* game, int index, int row, int order);
 static void spawn_camera(frogger_game_t* game);
 static void update_players(frogger_game_t* game);
-static void transform_player(transform_component_t* transform_comp, player_component_t* player_comp, float speed, uint32_t key_mask);
+static void transform_player(transform_component_t* transform_comp, player_component_t* player_comp, float speed, uint32_t key_mask, speech_t* speech, audio_source_t* source);
 static void transform_enemies(transform_component_t* transform_comp, int row,float speed,float dt);
 static void draw_models(frogger_game_t* game);
-static void collision_detecter(transform_component_t* player_transform, transform_component_t* transform_comp);
+static void collision_detecter(transform_component_t* player_transform, transform_component_t* transform_comp, speech_t* speech);
 static void respawn_player(transform_component_t* player_transform);
 
 
@@ -118,6 +130,10 @@ frogger_game_t* frogger_game_create(heap_t* heap, fs_t* fs, wm_window_t* window,
 
 	game->timer = timer_object_create(heap, NULL);
 
+	game->audio_system = init_system(heap);
+	set_global_volume(game->audio_system, 4);
+	game->speech = speech_init(heap, game->audio_system);
+
 	game->ecs = ecs_create(heap);
 	game->transform_type = ecs_register_component_type(game->ecs, "transform", sizeof(transform_component_t), _Alignof(transform_component_t));
 	game->camera_type = ecs_register_component_type(game->ecs, "camera", sizeof(camera_component_t), _Alignof(camera_component_t));
@@ -127,7 +143,9 @@ frogger_game_t* frogger_game_create(heap_t* heap, fs_t* fs, wm_window_t* window,
 	game->speed_type = ecs_register_component_type(game->ecs, "speed", sizeof(speed_component_t), _Alignof(speed_component_t));
 	game->refresh_type = ecs_register_component_type(game->ecs, "refresh", sizeof(refresh_component_t), _Alignof(refresh_component_t));
 	game->row_type = ecs_register_component_type(game->ecs, "row", sizeof(row_component_t), _Alignof(row_component_t));
-
+	game->audio_listener_type = ecs_register_component_type(game->ecs, "audio_listener", sizeof(audio_listener_component_t), _Alignof(audio_listener_component_t));
+	game->audio_source_type = ecs_register_component_type(game->ecs, "audio_source", sizeof(audio_source_component_t), _Alignof(audio_source_component_t));
+	
 
 	load_resources(game);
 	spawn_player(game, 0);
@@ -151,8 +169,27 @@ frogger_game_t* frogger_game_create(heap_t* heap, fs_t* fs, wm_window_t* window,
 
 void frogger_game_destroy(frogger_game_t* game)
 {
+	uint64_t query_mask = 1ULL << game->audio_source_type;
+	for (ecs_query_t query = ecs_query_create(game->ecs, query_mask);
+		ecs_query_is_valid(game->ecs, &query);
+		ecs_query_next(game->ecs, &query)) {
+		audio_source_component_t* source_comp = ecs_query_get_component(game->ecs, &query, game->audio_source_type);
+		audio_source_destroy(source_comp->source);
+	}
+
+	query_mask = 1ULL << game->audio_listener_type;
+	for (ecs_query_t query = ecs_query_create(game->ecs, query_mask);
+		ecs_query_is_valid(game->ecs, &query);
+		ecs_query_next(game->ecs, &query)) {
+		audio_listener_component_t* listener_comp = ecs_query_get_component(game->ecs, &query, game->audio_listener_type);
+		listener_destroy(listener_comp->listener);
+		
+	}
+
 	ecs_destroy(game->ecs);
 	timer_object_destroy(game->timer);
+	speech_destroy(game->speech);
+	audio_system_destroy(game->audio_system);
 	unload_resources(game);
 	heap_free(game->heap, game);
 }
@@ -298,6 +335,16 @@ static void spawn_player(frogger_game_t* game, int index)
 	refresh_component_t* refresh_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->refresh_type, true);
 	refresh_comp->rate = 0.25f;
 
+
+	audio_listener_component_t* audio_listener_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->audio_listener_type, true);
+	audio_listener_comp->listener = listener_init(game->heap, game->audio_system, &(transform_comp->transform));
+	
+	audio_source_component_t* audio_source_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->audio_source_type, true);
+	audio_source_comp->source = init_source(game->heap, &(transform_comp->transform), game->audio_system);
+	load_wav(audio_source_comp->source, "wav/click.wav");
+	set_wav_volume(audio_source_comp->source, 3);
+	source_setlooping(audio_source_comp->source, 0);
+	
 }
 
 static void spawn_enemy(frogger_game_t* game, int index, int row, int order) {
@@ -333,7 +380,16 @@ static void spawn_enemy(frogger_game_t* game, int index, int row, int order) {
 	row_component_t* row_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->row_type, true);
 	row_comp->row = row;
 
+	/*
+	audio_source_component_t* audio_source_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->audio_source_type, true);
+	audio_source_comp->source = init_source(game->heap, &(transform_comp->transform), game->audio_system);
+	load_wav(audio_source_comp->source, "wav/engine.wav");
+	source_setlooping(audio_source_comp->source, 1);
+	set_wav_volume(audio_source_comp->source, 0.5);
+	play_source(audio_source_comp->source);
 
+	*/
+	
 }
 
 
@@ -364,7 +420,7 @@ static void update_players(frogger_game_t* game)
 
 	
 
-	uint64_t k_query_mask = (1ULL << game->transform_type) | (1ULL << game->player_type);
+	uint64_t k_query_mask = (1ULL << game->transform_type) | (1ULL << game->player_type) | (1ULL << game->name_type);
 
 	transform_component_t* player_transform = NULL;
 
@@ -378,30 +434,32 @@ static void update_players(frogger_game_t* game)
 		player_component_t* player_comp = ecs_query_get_component(game->ecs, &query, game->player_type);
 		name_component_t* name_comp = ecs_query_get_component(game->ecs, &query, game->name_type);
 		speed_component_t* speed_comp = ecs_query_get_component(game->ecs, &query, game->speed_type);
+		
 
 		if (strcmp(name_comp->name, "player") == 0) {
 			refresh_component_t* refresh_comp = ecs_query_get_component(game->ecs, &query, game->refresh_type);
 			player_transform = transform_comp;
 			if (elapsedTime >= refresh_comp->rate) {
-				
+				audio_source_component_t* source = ecs_query_get_component(game->ecs, &query, game->audio_source_type);
+				audio_listener_component_t* listener_comp = ecs_query_get_component(game->ecs, &query, game->audio_listener_type);
 				float speed = speed_comp->speed;
 				uint32_t key_mask = wm_get_key_mask(game->window);
-				transform_player(transform_comp, player_comp, speed, key_mask);
-
-
+				transform_player(transform_comp, player_comp, speed, key_mask, game->speech, source->source);
+				update_listener(listener_comp->listener);
+				
 			}
 		}
 		else {
 			row_component_t* row_comp = ecs_query_get_component(game->ecs, &query, game->row_type);
 			int row = row_comp->row;
 			transform_enemies(transform_comp, row, speed_comp->speed,dt);
-			collision_detecter(player_transform, transform_comp);
+			collision_detecter(player_transform, transform_comp, game->speech);
 		}
 	
 	}
 }
 
-static void transform_player(transform_component_t* transform_comp, player_component_t* player_comp, float speed, uint32_t key_mask) {
+static void transform_player(transform_component_t* transform_comp, player_component_t* player_comp, float speed, uint32_t key_mask,  speech_t* speech, audio_source_t* source) {
 	transform_t move;
 	transform_identity(&move);
 	
@@ -409,21 +467,25 @@ static void transform_player(transform_component_t* transform_comp, player_compo
 	{
 		move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_up(), -speed));
 		elapsedTime = 0;
+		play_source_2d(source);
 	}
 	if (key_mask & k_key_down)
 	{
 		move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_up(), speed));
 		elapsedTime = 0;
+		play_source_2d(source);
 	}
 	if (key_mask & k_key_left)
 	{
 		move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_right(), -speed));
 		elapsedTime = 0;
+		play_source_2d(source);
 	}
 	if (key_mask & k_key_right)
 	{
 		move.translation = vec3f_add(move.translation, vec3f_scale(vec3f_right(), speed));
 		elapsedTime = 0;
+		play_source_2d(source);
 	}
 	transform_multiply(&transform_comp->transform, &move);
 	if (transform_comp->transform.translation.y > right) {
@@ -434,10 +496,14 @@ static void transform_player(transform_component_t* transform_comp, player_compo
 	}
 	if (transform_comp->transform.translation.z > top) {
 		debug_print(k_print_info, "Reached bottom of the road!\n");
+		set_text(speech, "Reached bottom of the road!");
+		play_speech(speech);
 		respawn_player(transform_comp);
 	}
 	if (transform_comp->transform.translation.z < -top) {
 		debug_print(k_print_info, "Reached other side of the road!\n");
+		set_text(speech, "Reached other side of the road!");
+		play_speech(speech);
 		respawn_player(transform_comp);
 	}
 }
@@ -463,10 +529,12 @@ static void transform_enemies(transform_component_t* transform_comp, int row, fl
 
 }
 
-static void collision_detecter(transform_component_t* player_transform, transform_component_t* transform_comp) {
+static void collision_detecter(transform_component_t* player_transform, transform_component_t* transform_comp, speech_t* speech) {
 	if (player_transform->transform.translation.z == transform_comp->transform.translation.z && 
 		fabsf(player_transform->transform.translation.y - transform_comp->transform.translation.y) < 1.2f) {
 		debug_print(k_print_info, "Collision!\n");
+		set_text(speech, "Collision!");
+		play_speech(speech);
 		respawn_player(player_transform);
 	}
 }
