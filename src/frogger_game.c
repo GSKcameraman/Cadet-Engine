@@ -342,7 +342,7 @@ static void spawn_player(frogger_game_t* game, int index)
 	audio_source_component_t* audio_source_comp = ecs_entity_get_component(game->ecs, game->player_ent, game->audio_source_type, true);
 	audio_source_comp->source = init_source(game->heap, &(transform_comp->transform), game->audio_system);
 	load_wav(audio_source_comp->source, "wav/click.wav");
-	set_wav_volume(audio_source_comp->source, 3);
+	set_wav_volume(audio_source_comp->source, 1);
 	source_setlooping(audio_source_comp->source, 0);
 	
 }
